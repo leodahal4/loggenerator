@@ -1,12 +1,9 @@
-FROM rust:1.70 AS builder
+FROM rust:1.70-alpine AS builder
 WORKDIR /usr/src/app
+RUN apk add --no-cache musl-dev
 COPY . .
-# RUN mkdir src && echo "fn main() {}" > src/main.rs
-RUN cargo build --release
-#RUN rm src/main.rs
-#COPY src ./src
-#RUN cargo build --release
-FROM debian:buster-slim
-# RUN apt-get update && apt-get install -y openssl ca-certificates && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /usr/src/app/target/release/log-generator ./main
-CMD ["./main"]
+RUN rustup target add x86_64-unknown-linux-musl
+RUN cargo build --release --target x86_64-unknown-linux-musl
+FROM alpine:3.14
+COPY --from=builder /usr/src/app/target/x86_64-unknown-linux-musl/release/log-generator /main
+CMD ["/main"]

@@ -9,37 +9,40 @@ use log4rs::{
     config::{Appender, Config, Root},
     encode::pattern::PatternEncoder,
 };
-use std::{
-    sync::mpsc,
-    thread,
-    time::Duration,
-};
+use std::{env, thread, time::Duration};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let save_in_log = env::var("SAVE_IN_FILE").is_ok();
     let stdout = ConsoleAppender::builder().build();
-    let logfile = FileAppender::builder()
-        .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
-        .build("output.log")?;
-    let config = Config::builder()
-        .appender(Appender::builder().build("stdout", Box::new(stdout)))
-        .appender(Appender::builder().build("logfile", Box::new(logfile)))
-        .build(Root::builder()
-            .appender("stdout")
-            .appender("logfile")
-            .build(LevelFilter::Info))?;
+    let mut config_builder = Config::builder()
+        .appender(Appender::builder().build("stdout", Box::new(stdout)));
+    let mut root_builder = Root::builder().appender("stdout");
+    if save_in_log {
+        let logfile = FileAppender::builder()
+            .encoder(Box::new(PatternEncoder::new("{d} - {m}{n}")))
+            .build("output.log")?;
+        config_builder = config_builder
+            .appender(Appender::builder().build("logfile", Box::new(logfile)));
+        root_builder = root_builder.appender("logfile");
+    }
+    let config = config_builder
+        .build(root_builder.build(LevelFilter::Info))?;
     log4rs::init_config(config)?;
-    let (tx, rx) = mpsc::channel();
-    thread::spawn(move || {
-        while let Ok(log_entry) = rx.recv() {
-            info!("{}", log_entry);
-        }
-    });
     let mut counter = 1;
     loop {
-        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S").to_string();
+        let timestamp = Local::now().format("%Y-%m-%d %H:%M:%S:%f").to_string();
         let log_entry = format!("Log entry #{}: Generated at {}", counter, timestamp);
-        tx.send(log_entry).unwrap();
+        if save_in_log {
+            info!("{}", log_entry);
+        } else {
+            println!("{}", log_entry);
+        }
         counter += 1;
-        thread::sleep(Duration::from_secs(5));
+        thread::sleep(Duration::from_nanos(1));
+        if counter == 10000{
+            println!("10000 lines printed, so now sleeping for 5 seconds");
+            thread::sleep(Duration::from_secs(5));
+            counter = 1;
+        }
     }
 }
